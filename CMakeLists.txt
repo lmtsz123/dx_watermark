@@ -29,6 +29,9 @@ set(SOURCES
     src/WatermarkRenderer.cpp
     src/VideoProcessor.cpp
     src/FFmpegWatermarkProcessor.cpp
+    src/DXGICapture.cpp
+    src/MouseHandler.cpp
+    src/ScreenRecorder.cpp
     src/main.cpp
 )
 
@@ -37,6 +40,9 @@ set(HEADERS
     include/WatermarkRenderer.h
     include/VideoProcessor.h
     include/FFmpegWatermarkProcessor.h
+    include/DXGICapture.h
+    include/MouseHandler.h
+    include/ScreenRecorder.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
