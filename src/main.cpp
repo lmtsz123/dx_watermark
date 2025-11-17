@@ -4,6 +4,7 @@
 #include <iostream>
 #include <Windows.h>
 #include <filesystem>
+#include <shellapi.h>
 
 int main(int argc, char* argv[])
 {
@@ -11,28 +12,51 @@ int main(int argc, char* argv[])
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     
+    // 使用GetCommandLineW获取Unicode命令行参数
+    int wargc = 0;
+    LPWSTR* wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
+    if (wargv == nullptr) {
+        std::cerr << "获取命令行参数失败" << std::endl;
+        return 1;
+    }
+    
     // 初始化COM
     CoInitialize(nullptr);
 
-    if (argc < 2) {
-        std::cout << "用法: " << argv[0] << " <输入视频> [透明度] [方法]" << std::endl;
+    if (wargc < 2) {
+        std::cout << "用法: " << argv[0] << " <输入视频> [透明度] [方法] [文字水印]" << std::endl;
         std::cout << "参数说明:" << std::endl;
         std::cout << "  输入视频: 要处理的视频文件路径" << std::endl;
         std::cout << "  透明度: 水印透明度 (0.0-1.0)，默认0.3" << std::endl;
         std::cout << "  方法: 处理方法，可选值：" << std::endl;
         std::cout << "    dx     - 使用DirectX GPU加速 (默认)" << std::endl;
         std::cout << "    ffmpeg - 使用FFmpeg filter" << std::endl;
+        std::cout << "  文字水印: 可选，如果提供则生成文字水印（45度倾斜平铺）" << std::endl;
+        std::cout << "           如果不提供则使用watermark_1.png图片水印" << std::endl;
         std::cout << "\n示例:" << std::endl;
         std::cout << "  " << argv[0] << " input.mp4 0.3 dx" << std::endl;
+        std::cout << "  " << argv[0] << " input.mp4 0.3 dx \"机密文件\"" << std::endl;
         std::cout << "  " << argv[0] << " input.mp4 0.3 ffmpeg" << std::endl;
         std::cout << "\n输出文件将自动生成在输入文件的同一目录下" << std::endl;
+        LocalFree(wargv);
         CoUninitialize();
         return 1;
     }
 
-    std::string inputPath = argv[1];
-    float alpha = (argc >= 3) ? std::stof(argv[2]) : 0.3f;
-    std::string method = (argc >= 4) ? argv[3] : "dx";
+    // 从Unicode参数转换为所需格式
+    // 将wstring转换为UTF-8 string
+    auto WStringToUTF8 = [](const std::wstring& wstr) -> std::string {
+        if (wstr.empty()) return std::string();
+        int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string result(size - 1, 0);
+        WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &result[0], size, nullptr, nullptr);
+        return result;
+    };
+    
+    std::string inputPath = WStringToUTF8(wargv[1]);
+    float alpha = (wargc >= 3) ? std::stof(wargv[2]) : 0.3f;
+    std::string method = (wargc >= 4) ? WStringToUTF8(wargv[3]) : "dx";
+    std::wstring textWatermark = (wargc >= 5) ? wargv[4] : L"";
     
     // 转换为小写
     for (auto& c : method) {
@@ -43,6 +67,7 @@ int main(int argc, char* argv[])
     if (method != "dx" && method != "ffmpeg") {
         std::cerr << "错误: 无效的处理方法 '" << method << "'" << std::endl;
         std::cerr << "请使用 'dx' 或 'ffmpeg'" << std::endl;
+        LocalFree(wargv);
         CoUninitialize();
         return 1;
     }
@@ -80,6 +105,7 @@ int main(int argc, char* argv[])
         int videoWidth = 0, videoHeight = 0;
         if (!VideoProcessor::GetVideoDimensions(inputPath, videoWidth, videoHeight)) {
             std::cerr << "无法获取视频尺寸" << std::endl;
+            LocalFree(wargv);
             CoUninitialize();
             return 1;
         }
@@ -91,18 +117,37 @@ int main(int argc, char* argv[])
         WatermarkRenderer watermarkRenderer;
         if (!watermarkRenderer.Initialize()) {
             std::cerr << "初始化水印渲染器失败" << std::endl;
+            LocalFree(wargv);
             CoUninitialize();
             return 1;
         }
 
         std::vector<unsigned char> watermarkData;
         
-        // 从PNG文件加载水印（自适应视频尺寸）
-        std::string watermarkPath = "watermark_1.png";
-        if (!watermarkRenderer.LoadWatermarkFromPNG(watermarkPath, videoWidth, videoHeight, watermarkData)) {
-            std::cerr << "加载水印失败，请确保 watermark_1.png 存在于程序目录" << std::endl;
-            CoUninitialize();
-            return 1;
+        // 根据是否提供文字水印选择加载方式
+        if (!textWatermark.empty()) {
+            // 生成文字水印（45度倾斜平铺）
+            std::cout << "生成文字水印..." << std::endl;
+            
+            // textWatermark已经是wstring，直接使用
+            if (!watermarkRenderer.CreateTiledWatermark(videoWidth, videoHeight, textWatermark, watermarkData)) {
+                std::cerr << "生成文字水印失败" << std::endl;
+                LocalFree(wargv);
+                CoUninitialize();
+                return 1;
+            }
+            std::cout << "文字水印生成成功（45度倾斜平铺）" << std::endl;
+        } else {
+            // 从PNG文件加载水印（自适应视频尺寸）
+            std::string watermarkPath = "watermark_1.png";
+            std::cout << "从文件加载水印: " << watermarkPath << std::endl;
+            
+            if (!watermarkRenderer.LoadWatermarkFromPNG(watermarkPath, videoWidth, videoHeight, watermarkData)) {
+                std::cerr << "加载水印失败，请确保 watermark_1.png 存在于程序目录" << std::endl;
+                LocalFree(wargv);
+                CoUninitialize();
+                return 1;
+            }
         }
 
         // 处理视频
@@ -115,6 +160,7 @@ int main(int argc, char* argv[])
 
     if (!success) {
         std::cerr << "视频处理失败" << std::endl;
+        LocalFree(wargv);
         CoUninitialize();
         return 1;
     }
@@ -122,6 +168,7 @@ int main(int argc, char* argv[])
     std::cout << "\n处理完成！" << std::endl;
     std::cout << "输出文件: " << outputPath << std::endl;
 
+    LocalFree(wargv);
     CoUninitialize();
     return 0;
 }
