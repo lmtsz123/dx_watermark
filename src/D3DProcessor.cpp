@@ -6,6 +6,77 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
+// BMP文件头结构
+#pragma pack(push, 1)
+struct BMPFileHeader {
+    uint16_t bfType;
+    uint32_t bfSize;
+    uint16_t bfReserved1;
+    uint16_t bfReserved2;
+    uint32_t bfOffBits;
+};
+
+struct BMPInfoHeader {
+    uint32_t biSize;
+    int32_t biWidth;
+    int32_t biHeight;
+    uint16_t biPlanes;
+    uint16_t biBitCount;
+    uint32_t biCompression;
+    uint32_t biSizeImage;
+    int32_t biXPelsPerMeter;
+    int32_t biYPelsPerMeter;
+    uint32_t biClrUsed;
+    uint32_t biClrImportant;
+};
+#pragma pack(pop)
+
+// 保存RGBA数据为BMP文件
+static void SaveBMP(const std::string& filename, const unsigned char* rgbaData, int width, int height)
+{
+    // BMP按BGR格式存储，从下到上
+    int rowSize = ((width * 3 + 3) / 4) * 4; // 行大小必须是4的倍数
+    int imageSize = rowSize * height;
+    
+    BMPFileHeader fileHeader = {};
+    fileHeader.bfType = 0x4D42; // 'BM'
+    fileHeader.bfSize = sizeof(BMPFileHeader) + sizeof(BMPInfoHeader) + imageSize;
+    fileHeader.bfOffBits = sizeof(BMPFileHeader) + sizeof(BMPInfoHeader);
+    
+    BMPInfoHeader infoHeader = {};
+    infoHeader.biSize = sizeof(BMPInfoHeader);
+    infoHeader.biWidth = width;
+    infoHeader.biHeight = height; // 正数表示从下到上
+    infoHeader.biPlanes = 1;
+    infoHeader.biBitCount = 24;
+    infoHeader.biCompression = 0; // BI_RGB
+    infoHeader.biSizeImage = imageSize;
+    
+    std::ofstream file(filename, std::ios::binary);
+    if (!file) {
+        std::cerr << "无法创建BMP文件: " << filename << std::endl;
+        return;
+    }
+    
+    file.write(reinterpret_cast<const char*>(&fileHeader), sizeof(fileHeader));
+    file.write(reinterpret_cast<const char*>(&infoHeader), sizeof(infoHeader));
+    
+    // 写入像素数据（从下到上，BGR格式）
+    std::vector<unsigned char> rowData(rowSize, 0);
+    for (int y = height - 1; y >= 0; y--) {
+        for (int x = 0; x < width; x++) {
+            int srcIdx = (y * width + x) * 4;
+            int dstIdx = x * 3;
+            rowData[dstIdx + 0] = rgbaData[srcIdx + 2]; // B
+            rowData[dstIdx + 1] = rgbaData[srcIdx + 1]; // G
+            rowData[dstIdx + 2] = rgbaData[srcIdx + 0]; // R
+        }
+        file.write(reinterpret_cast<const char*>(rowData.data()), rowSize);
+    }
+    
+    file.close();
+}
+
 D3DProcessor::D3DProcessor() : width_(0), height_(0)
 {
 }
@@ -398,6 +469,28 @@ bool D3DProcessor::BlendTextures(ID3D11ShaderResourceView* videoSRV,
     if (SUCCEEDED(hr)) {
         // 转换RGBA到RGB，注意使用RowPitch而不是width*4
         unsigned char* src = static_cast<unsigned char*>(mapped.pData);
+        
+        // 保存前5帧的混合结果为BMP（用于调试）
+        static int frameCount = 0;
+        if (frameCount < 5) {
+            std::vector<unsigned char> bmpData(width_ * height_ * 4);
+            for (int y = 0; y < height_; y++) {
+                for (int x = 0; x < width_; x++) {
+                    int srcIdx = y * mapped.RowPitch + x * 4;
+                    int dstIdx = (y * width_ + x) * 4;
+                    bmpData[dstIdx + 0] = src[srcIdx + 0];  // R
+                    bmpData[dstIdx + 1] = src[srcIdx + 1];  // G
+                    bmpData[dstIdx + 2] = src[srcIdx + 2];  // B
+                    bmpData[dstIdx + 3] = src[srcIdx + 3];  // A
+                }
+            }
+            
+            std::string filename = "blended_frame_" + std::to_string(frameCount) + ".bmp";
+            SaveBMP(filename, bmpData.data(), width_, height_);
+            std::cout << "已保存混合后的帧: " << filename << std::endl;
+            frameCount++;
+        }
+        
         for (int y = 0; y < height_; y++) {
             for (int x = 0; x < width_; x++) {
                 // 使用RowPitch来正确计算源索引

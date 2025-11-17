@@ -19,15 +19,10 @@ float4 main(PS_INPUT input) : SV_TARGET
     float4 videoColor = videoTexture.Sample(samplerState, input.Tex);
     float4 watermarkColor = watermarkTexture.Sample(samplerState, input.Tex);
     
-    // 如果水印有内容（alpha > 0），进行混合
-    if (watermarkColor.a > 0.01)
-    {
-        // 使用水印的alpha和用户指定的alpha进行混合
-        float finalAlpha = watermarkColor.a * alpha;
-        float3 blended = lerp(videoColor.rgb, watermarkColor.rgb, finalAlpha);
-        return float4(blended, 1.0f);
-    }
+    // 始终进行混合，使用水印的alpha和用户指定的alpha
+    // 如果水印某处是透明的(alpha=0)，则finalAlpha=0，结果就是原视频
+    float finalAlpha = watermarkColor.a * alpha;
+    float3 blended = lerp(videoColor.rgb, watermarkColor.rgb, finalAlpha);
     
-    // 没有水印的地方返回原视频
-    return float4(videoColor.rgb, 1.0f);
+    return float4(blended, 1.0f);
 }

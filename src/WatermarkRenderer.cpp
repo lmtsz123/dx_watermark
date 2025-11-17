@@ -204,15 +204,11 @@ bool WatermarkRenderer::LoadWatermarkFromPNG(const std::string& pngPath,
         return false;
     }
 
-    // 计算缩放比例（保持宽高比）
-    double scaleX = static_cast<double>(targetWidth) / originalWidth;
-    double scaleY = static_cast<double>(targetHeight) / originalHeight;
-    double scale = (std::min)(scaleX, scaleY);
+    // 直接拉伸到目标尺寸（填满整个画面）
+    UINT scaledWidth = targetWidth;
+    UINT scaledHeight = targetHeight;
     
-    UINT scaledWidth = static_cast<UINT>(originalWidth * scale);
-    UINT scaledHeight = static_cast<UINT>(originalHeight * scale);
-    
-    std::cout << "水印缩放后尺寸: " << scaledWidth << "x" << scaledHeight << std::endl;
+    std::cout << "水印拉伸到视频尺寸: " << scaledWidth << "x" << scaledHeight << std::endl;
 
     hr = scaler->Initialize(
         converter.Get(),
@@ -236,30 +232,25 @@ bool WatermarkRenderer::LoadWatermarkFromPNG(const std::string& pngPath,
         return false;
     }
 
-    // 创建目标缓冲区（与视频尺寸相同，RGBA格式，初始化为全透明）
+    // 创建目标缓冲区（与视频尺寸相同，RGBA格式）
     outData.resize(targetWidth * targetHeight * 4);
-    std::fill(outData.begin(), outData.end(), 0);
     
-    // 计算居中偏移
-    int offsetX = (targetWidth - scaledWidth) / 2;
-    int offsetY = (targetHeight - scaledHeight) / 2;
-    
-    // 将缩放后的水印复制到目标缓冲区（居中）
+    // 复制整个水印，转换BGRA到RGBA
     for (UINT y = 0; y < scaledHeight; y++) {
         for (UINT x = 0; x < scaledWidth; x++) {
-            int targetX = x + offsetX;
-            int targetY = y + offsetY;
+            int srcIdx = (y * scaledWidth + x) * 4;
+            int dstIdx = (y * targetWidth + x) * 4;
             
-            if (targetX >= 0 && targetX < targetWidth && targetY >= 0 && targetY < targetHeight) {
-                int srcIdx = (y * scaledWidth + x) * 4;
-                int dstIdx = (targetY * targetWidth + targetX) * 4;
-                
-                // 转换BGRA到RGBA（保留alpha通道）
-                outData[dstIdx + 0] = scaledBuffer[srcIdx + 2]; // R
-                outData[dstIdx + 1] = scaledBuffer[srcIdx + 1]; // G
-                outData[dstIdx + 2] = scaledBuffer[srcIdx + 0]; // B
-                outData[dstIdx + 3] = scaledBuffer[srcIdx + 3]; // A (保留alpha)
-            }
+            BYTE b = scaledBuffer[srcIdx + 0];
+            BYTE g = scaledBuffer[srcIdx + 1];
+            BYTE r = scaledBuffer[srcIdx + 2];
+            BYTE a = scaledBuffer[srcIdx + 3];
+            
+            // 转换BGRA到RGBA
+            outData[dstIdx + 0] = r;
+            outData[dstIdx + 1] = g;
+            outData[dstIdx + 2] = b;
+            outData[dstIdx + 3] = a;
         }
     }
 

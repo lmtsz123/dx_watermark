@@ -28,6 +28,7 @@ set(SOURCES
     src/D3DProcessor.cpp
     src/WatermarkRenderer.cpp
     src/VideoProcessor.cpp
+    src/FFmpegWatermarkProcessor.cpp
     src/main.cpp
 )
 
@@ -35,6 +36,7 @@ set(HEADERS
     include/D3DProcessor.h
     include/WatermarkRenderer.h
     include/VideoProcessor.h
+    include/FFmpegWatermarkProcessor.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
@@ -48,21 +50,29 @@ target_link_libraries(${PROJECT_NAME}
     $<$<CONFIG:Debug>:libswscaled>
     $<$<CONFIG:Debug>:libavutild>
     $<$<CONFIG:Debug>:libswresampled>
+    $<$<CONFIG:Debug>:libavfilterd>
+    $<$<CONFIG:Debug>:libpostprocd>
     $<$<CONFIG:Release>:libavformat>
     $<$<CONFIG:Release>:libavcodec>
     $<$<CONFIG:Release>:libswscale>
     $<$<CONFIG:Release>:libavutil>
     $<$<CONFIG:Release>:libswresample>
+    $<$<CONFIG:Release>:libavfilter>
+    $<$<CONFIG:Release>:libpostproc>
     $<$<CONFIG:RelWithDebInfo>:libavformat>
     $<$<CONFIG:RelWithDebInfo>:libavcodec>
     $<$<CONFIG:RelWithDebInfo>:libswscale>
     $<$<CONFIG:RelWithDebInfo>:libavutil>
     $<$<CONFIG:RelWithDebInfo>:libswresample>
+    $<$<CONFIG:RelWithDebInfo>:libavfilter>
+    $<$<CONFIG:RelWithDebInfo>:libpostproc>
     $<$<CONFIG:MinSizeRel>:libavformat>
     $<$<CONFIG:MinSizeRel>:libavcodec>
     $<$<CONFIG:MinSizeRel>:libswscale>
     $<$<CONFIG:MinSizeRel>:libavutil>
     $<$<CONFIG:MinSizeRel>:libswresample>
+    $<$<CONFIG:MinSizeRel>:libavfilter>
+    $<$<CONFIG:MinSizeRel>:libpostproc>
     # DirectX
     d3d11.lib dxgi.lib d3dcompiler.lib
     # DirectWrite for text

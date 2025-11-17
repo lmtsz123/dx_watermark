@@ -251,8 +251,16 @@ AVFrame* VideoProcessor::ProcessFrame(AVFrame* frame,
     sws_scale(swsToRgbCtx_, frame->data, frame->linesize, 0, height_,
               rgbFrame->data, rgbFrame->linesize);
 
+    // 由于FFmpeg的linesize可能有padding，需要复制到紧密排列的缓冲区
+    std::vector<unsigned char> tightRgbData(width_ * height_ * 3);
+    for (int y = 0; y < height_; y++) {
+        memcpy(tightRgbData.data() + y * width_ * 3,
+               rgbFrame->data[0] + y * rgbFrame->linesize[0],
+               width_ * 3);
+    }
+
     // 更新视频纹理数据（不重新创建纹理）
-    if (!d3dProcessor_->UpdateTextureData(videoTexture_, rgbFrame->data[0], width_, height_)) {
+    if (!d3dProcessor_->UpdateTextureData(videoTexture_, tightRgbData.data(), width_, height_)) {
         std::cerr << "更新视频纹理失败" << std::endl;
         av_frame_free(&rgbFrame);
         return nullptr;
