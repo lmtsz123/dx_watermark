@@ -297,8 +297,12 @@ AVFrame* VideoProcessor::ProcessFrame(AVFrame* frame,
     tempRgbFrame->height = height_;
     av_frame_get_buffer(tempRgbFrame, 0);
 
-    // 复制混合后的数据
-    memcpy(tempRgbFrame->data[0], blendedData.data(), width_ * height_ * 3);
+    // 逐行复制混合后的数据，考虑目标的linesize
+    for (int y = 0; y < height_; y++) {
+        memcpy(tempRgbFrame->data[0] + y * tempRgbFrame->linesize[0],  // 目标：有padding
+               blendedData.data() + y * width_ * 3,                     // 源：紧密排列
+               width_ * 3);                                             // 复制一行
+    }
 
     // 转换回YUV（写入新分配的yuvFrame）
     sws_scale(swsToYuvCtx_, tempRgbFrame->data, tempRgbFrame->linesize, 0, height_,
